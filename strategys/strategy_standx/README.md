@@ -68,10 +68,35 @@ StandX 网格交易策略，自动执行做多做空订单管理，支持持仓�
 
 ### Linux / Mac
 
-```bash
-# 1. 进入项目根目录
-cd /path/to/DD-strategy-bot
+#### 方式一：使用 Git（推荐）
 
+```bash
+# 1. 克隆仓库
+git clone https://github.com/Dazmon88/DD-strategy-bot.git
+cd DD-strategy-bot
+```
+
+#### 方式二：使用 curl 下载
+
+```bash
+# 1. 下载并解压
+curl -L https://github.com/Dazmon88/DD-strategy-bot/archive/refs/heads/main.zip -o DD-strategy-bot.zip
+unzip DD-strategy-bot.zip
+cd DD-strategy-bot-main
+```
+
+#### 方式三：使用 wget 下载
+
+```bash
+# 1. 下载并解压
+wget https://github.com/Dazmon88/DD-strategy-bot/archive/refs/heads/main.zip
+unzip main.zip
+cd DD-strategy-bot-main
+```
+
+#### 后续步骤（所有方式通用）
+
+```bash
 # 2. 创建虚拟环境（推荐）
 python3 -m venv venv
 
