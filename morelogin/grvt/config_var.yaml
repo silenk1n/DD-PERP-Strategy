@@ -1,0 +1,12 @@
+# GRVT和Variational交易所配置
+# 请填写你的morelogin环境ID
+
+# GRVT交易所的morelogin环境ID
+grvt_env_id: "1923208407345078272"
+
+# Variational交易所的morelogin环境ID
+var_env_id: "1923208407286358016"
+
+# 交易对（例如: BTC, ETH, SOL等）
+# GRVT会自动添加-USDT后缀，Variational直接使用该符号
+symbol: "ETH"

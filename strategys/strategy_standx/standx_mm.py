@@ -6,6 +6,8 @@ import sys
 import os
 import yaml
 import time
+import random
+import argparse
 from decimal import Decimal
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -13,25 +15,65 @@ project_root = os.path.dirname(os.path.dirname(current_dir))
 sys.path.insert(0, project_root)
 
 from adapters import create_adapter
+from risk import IndicatorTool
 
-config_path = os.path.join(current_dir, "config.yaml")
+# 全局配置变量
+STANDX_CONFIG = None
+SYMBOL = None
+GRID_CONFIG = None
+RISK_CONFIG = None
+CANCEL_STALE_ORDERS_CONFIG = None
 
-with open(config_path, 'r', encoding='utf-8') as f:
-    config = yaml.safe_load(f)
 
-STANDX_CONFIG = config['exchange']
-SYMBOL = config['symbol']
-GRID_CONFIG = config['grid']
+def load_config(config_file="config.yaml"):
+    """
+    加载配置文件
+    
+    Args:
+        config_file: 配置文件路径，可以是相对路径或绝对路径
+    
+    Returns:
+        dict: 配置字典
+    """
+    # 如果是相对路径，相对于脚本目录
+    if not os.path.isabs(config_file):
+        config_path = os.path.join(current_dir, config_file)
+    else:
+        config_path = config_file
+    
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+    
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    
+    return config
+
+
+def initialize_config(config_file="config.yaml"):
+    """初始化全局配置变量"""
+    global STANDX_CONFIG, SYMBOL, GRID_CONFIG, RISK_CONFIG, CANCEL_STALE_ORDERS_CONFIG
+    
+    config = load_config(config_file)
+    STANDX_CONFIG = config['exchange']
+    SYMBOL = config['symbol']
+    GRID_CONFIG = config['grid']
+    RISK_CONFIG = config.get('risk', {})
+    CANCEL_STALE_ORDERS_CONFIG = config.get('cancel_stale_orders', {})
 
 
 def generate_grid_arrays(current_price, price_step, grid_count, price_spread):
-    """根据当前价格和价格间距生成做多数组和做空数组"""
+    """根据当前价格和价格间距生成做多数组和做空数组，过滤超过当前价格上下1%的价格"""
     if price_step <= 0:
         raise ValueError("price_step 必须大于 0")
     if grid_count < 0:
         raise ValueError("grid_count 必须大于等于 0")
     if price_spread < 0:
         raise ValueError("price_spread 必须大于等于 0")
+    
+    # 计算价格上下限（当前价格的上下1%）
+    price_upper_limit = current_price * 1.01  # 上限：当前价格 +1%
+    price_lower_limit = current_price * 0.99   # 下限：当前价格 -1%
     
     # 计算 bid 和 ask 价格
     bid_price = current_price - price_spread
@@ -47,14 +89,18 @@ def generate_grid_arrays(current_price, price_step, grid_count, price_spread):
     long_grid = []
     for i in range(grid_count):
         price = bid_base - i * price_step
-        long_grid.append(price)
+        # 过滤：做多价格不能低于当前价格的1%（即不能低于 price_lower_limit）
+        if price >= price_lower_limit:
+            long_grid.append(price)
     long_grid = sorted(long_grid)
     
     # 做空数组：从 ask_base 向上 grid_count 个（包括 ask_base）
     short_grid = []
     for i in range(grid_count):
         price = ask_base + i * price_step
-        short_grid.append(price)
+        # 过滤：做空价格不能超过当前价格的1%（即不能高于 price_upper_limit）
+        if price <= price_upper_limit:
+            short_grid.append(price)
     short_grid = sorted(short_grid)
     
     return long_grid, short_grid
@@ -110,6 +156,47 @@ def get_pending_orders_arrays(adapter, symbol):
     except Exception as e:
         print(f"获取未成交订单失败: {e}")
         return [], [], {}, {}
+
+
+def cancel_stale_order_ids(adapter, symbol, stale_seconds=5, cancel_probability=0.5):
+    """随机取消未成交时间大于指定秒数的订单
+    
+    Args:
+        adapter: 适配器实例
+        symbol: 交易对符号
+        stale_seconds: 未成交时间阈值（秒），默认5秒
+        cancel_probability: 取消概率（0-1之间），默认0.5（50%）
+    """
+    try:
+        open_orders = adapter.get_open_orders(symbol=symbol)
+        stale_order_ids = []
+        current_time = int(time.time() * 1000)  # 当前时间（毫秒）
+        
+        for order in open_orders:
+            # 只处理未成交的订单
+            if order.status in ["pending", "open", "partially_filled"]:
+                if order.created_at:
+                    # 计算未成交时间（毫秒）
+                    elapsed_time = current_time - order.created_at
+                    if elapsed_time > stale_seconds * 1000:  # 转换为毫秒
+                        # 根据概率决定是否取消
+                        if random.random() < cancel_probability:
+                            try:
+                                order_id = int(order.order_id)
+                                stale_order_ids.append(order_id)
+                            except (ValueError, TypeError):
+                                pass
+        
+        # 如果有需要取消的订单，执行批量撤单
+        if stale_order_ids:
+            print(f"随机取消未成交时间>{stale_seconds}秒的订单: {stale_order_ids} (概率: {cancel_probability*100}%)")
+            try:
+                if hasattr(adapter, 'cancel_orders_by_ids'):
+                    adapter.cancel_orders_by_ids(order_id_list=stale_order_ids)
+            except:
+                pass
+    except Exception:
+        pass
 
 
 def cancel_orders_by_prices(cancel_long, cancel_short, long_price_to_ids, short_price_to_ids, adapter):
@@ -271,6 +358,37 @@ def close_position_if_exists(adapter, symbol):
         pass
 
 
+def calculate_dynamic_price_spread(adx, current_price, default_spread, adx_threshold):
+    """根据 ADX 值动态计算 price_spread
+    
+    Args:
+        adx: ADX 指标值
+        current_price: 当前价格
+        default_spread: 默认 price_spread
+        adx_threshold: ADX 阈值，低于此值使用默认值
+    
+    Returns:
+        int: 计算后的 price_spread
+    """
+    max_spread = current_price * 0.01  # 最大为价格的1%
+    
+    if adx is not None:
+        print(f"ADX(5m): {adx:.2f}")
+        # ADX <= threshold 时使用默认值，ADX > threshold 时按比例增加
+        if adx <= adx_threshold:
+            price_spread = default_spread
+        else:
+            # ADX 在 [threshold, 100] 范围内映射到 [默认值, 最大值]
+            ratio = (adx - adx_threshold) / (100 - adx_threshold)  # ADX threshold-100 映射到 0-1
+            dynamic_spread = default_spread + ratio * (max_spread - default_spread)
+            price_spread = int(min(dynamic_spread, max_spread))
+        print(f"动态 price_spread: {price_spread} (默认: {default_spread}, 最大: {int(max_spread)})")
+        return price_spread
+    else:
+        print(f"ADX(5m): 获取失败，使用默认 price_spread: {default_spread}")
+        return default_spread
+
+
 def run_strategy_cycle(adapter):
     """执行一次策略循环
     
@@ -280,12 +398,23 @@ def run_strategy_cycle(adapter):
     price_info = adapter.get_ticker(SYMBOL)
     last_price = price_info.get('last_price') or price_info.get('mid_price') or price_info.get('mark_price')
     print(f"{SYMBOL} 价格: {last_price:.2f}")
+
+    # 获取 ADX 指标并动态调整 price_spread
+    default_spread = GRID_CONFIG['price_spread']
+    
+    if RISK_CONFIG.get('enable', False):
+        indicator_tool = IndicatorTool()
+        adx = indicator_tool.get_adx(SYMBOL, "5m", period=14)
+        adx_threshold = RISK_CONFIG.get('adx_threshold', 25)
+        price_spread = calculate_dynamic_price_spread(adx, last_price, default_spread, adx_threshold)
+    else:
+        price_spread = default_spread
     
     long_grid, short_grid = generate_grid_arrays(
         last_price, 
         GRID_CONFIG['price_step'], 
         GRID_CONFIG['grid_count'],
-        GRID_CONFIG['price_spread']
+        price_spread
     )
     print(f"做多数组: {long_grid}")
     print(f"做空数组: {short_grid}")
@@ -306,6 +435,12 @@ def run_strategy_cycle(adapter):
     cancel_orders_by_prices(
         cancel_long, cancel_short, long_price_to_ids, short_price_to_ids, adapter
     )
+
+    # 随机取消未成交时间过长的订单
+    if CANCEL_STALE_ORDERS_CONFIG.get('enable', False):
+        stale_seconds = CANCEL_STALE_ORDERS_CONFIG.get('stale_seconds', 5)
+        cancel_probability = CANCEL_STALE_ORDERS_CONFIG.get('cancel_probability', 0.5)
+        cancel_stale_order_ids(adapter, SYMBOL, stale_seconds, cancel_probability)
     
     # 计算需要下单的数组
     place_long, place_short = calculate_place_orders(
@@ -323,6 +458,27 @@ def run_strategy_cycle(adapter):
 
 
 def main():
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='StandX 策略脚本')
+    parser.add_argument(
+        '-c', '--config',
+        type=str,
+        default='config.yaml',
+        help='指定配置文件路径（默认: config.yaml）'
+    )
+    args = parser.parse_args()
+    
+    # 加载配置文件
+    try:
+        print(f"加载配置文件: {args.config}")
+        initialize_config(args.config)
+    except FileNotFoundError as e:
+        print(f"错误: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"加载配置文件失败: {e}")
+        sys.exit(1)
+    
     try:
         adapter = create_adapter(STANDX_CONFIG)
         adapter.connect()

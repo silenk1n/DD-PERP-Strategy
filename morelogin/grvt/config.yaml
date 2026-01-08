@@ -1,12 +1,45 @@
-# GRVT和Variational交易所配置
-# 请填写你的morelogin环境ID
+# MoreLogin 批量打开配置文件配置
 
-# GRVT交易所的morelogin环境ID
-grvt_env_id: "1923208407345078272"
+# 环境ID列表（MoreLogin环境ID）
+env_ids:
+  - "1923208407345078272"
+  - "1923208407286358016"
 
-# Variational交易所的morelogin环境ID
-var_env_id: "1923208407286358016"
+# 交易对配置（二选一）
+# 方式1: 使用交易对（推荐）- 自动构建URL，例如: "BTC-USDT", "XPL-USDT", "ETH-USDT"
+trading_pair: "XPL-USDT"
 
-# 交易对（例如: BTC, ETH, SOL等）
-# GRVT会自动添加-USDT后缀，Variational直接使用该符号
-symbol: "ETH"
+# API配置
+api:
+  # MoreLogin API 基础URL
+  base_url: "http://localhost:40000"
+  # API请求超时时间（秒）
+  timeout: 10
+  # 关闭环境时的超时时间（秒，可以设置更短以加快关闭速度）
+  close_timeout: 2
+
+# 浏览器配置
+browser:
+  # 页面加载超时时间（毫秒）
+  page_load_timeout: 30000
+  # 页面加载等待策略: "load" | "domcontentloaded" | "networkidle" | "commit"
+  # "domcontentloaded" 更快，适合大多数场景
+  # "networkidle" 最慢但最完整，等待所有网络请求完成
+  wait_until: "domcontentloaded"
+
+# 等待时间配置（秒）
+delays:
+  # 浏览器启动后的等待时间
+  after_browser_start: 1
+  # 打开下一个环境前的等待时间
+  between_profiles: 0.5
+
+# 交易配置
+trading:
+  # 限价单价格偏移量（在最佳买价基础上加的值）
+  price_offset: 0.0001
+  # 交易数量
+  amount: 30
+  # 持仓检查间隔（每N次循环检查一次持仓）
+  position_check_interval: 3
+
