@@ -24,6 +24,48 @@ DD Strategy Bot 是一个免费开源的多平台永续合约策略系统，支�
 - ✅ 支持 StandX、GRVT、VAR 等多个平台
 - ✅ 技术指标计算（ADX 等）
 
+## 🚀 快速开始
+
+### 下载项目
+
+#### 方法 1: 使用 Git（推荐）
+
+```bash
+git clone https://github.com/Dazmon88/DD-strategy-bot.git
+cd DD-strategy-bot
+```
+
+#### 方法 2: 使用 wget（无需 Git）
+
+```bash
+# 下载项目压缩包
+wget https://github.com/Dazmon88/DD-strategy-bot/archive/refs/heads/main.zip
+
+# 解压
+unzip main.zip
+
+# 进入项目目录
+cd DD-strategy-bot-main
+```
+
+#### 方法 3: 使用 curl（无需 Git）
+
+```bash
+# 下载项目压缩包
+curl -L -o DD-strategy-bot.zip https://github.com/Dazmon88/DD-strategy-bot/archive/refs/heads/main.zip
+
+# 解压
+unzip DD-strategy-bot.zip
+
+# 进入项目目录
+cd DD-strategy-bot-main
+```
+
+**注意：** 如果系统没有 `unzip` 命令，可以使用以下命令安装：
+- **Ubuntu/Debian:** `sudo apt-get install unzip`
+- **CentOS/RHEL:** `sudo yum install unzip`
+- **macOS:** `brew install unzip`（需要先安装 Homebrew）
+
 ## 📦 安装依赖
 
 ### 基础依赖
